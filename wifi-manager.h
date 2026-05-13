@@ -118,19 +118,27 @@ class WifiManager {
 
 /**
  * @brief Start WiFi and block until an IP address is obtained.
+ * 
+ * This is a critical operation. If the device fails to acquire an IP address 
+ * within the specified timeout, the system will call abort() to trigger 
+ * a fail-fast reboot.
  *
- * @return esp_netif_ip_info_t& Reference to the IP information.
+ * @param timeout Maximum time to wait for IP acquisition in milliseconds. 
+ *                Defaults to 30,000 ms (30 seconds).
+ * 
+ * @return esp_netif_ip_info_t Copy of the acquired IP information.
  *
+ * @details
  * Behavior:
- *  - Calls esp_wifi_start() to begin WiFi operations.
- *  - Waits on internal semaphore (xSemaphoreTake with portMAX_DELAY)
- *    until IP_EVENT_STA_GOT_IP is signaled.
- *  - Returns a esp_netif_ip_info_t copy to the caller once connected.
+ *  1. Calls connect() to initiate the WiFi stack.
+ *  2. Waits on the internal binary semaphore (semIP) for the specified duration.
+ *  3. If IP_EVENT_STA_GOT_IP is signaled, returns the current IP info.
+ *  4. If the timeout expires, the system calls abort(), as network connectivity 
+ *     is considered mandatory for system operation.
  *
- * @note This method blocks the calling task until an IP is obtained.
- *       Use FreeRTOS task awareness when integrating into application logic.
+ * @note This method blocks the calling task.
  */
-    esp_netif_ip_info_t connectAndWaitIP();
+    esp_netif_ip_info_t connectAndWaitIP(const unsigned timeout = 30000);
 
 /**
  * @brief Erase WiFi credentials stored in NVS (Non-Volatile Storage).
@@ -398,14 +406,17 @@ void WifiManager::connect() {
     ESP_ERROR_CHECK( esp_wifi_start() );
 }
 
-esp_netif_ip_info_t WifiManager::connectAndWaitIP() {
+esp_netif_ip_info_t WifiManager::connectAndWaitIP(const unsigned timeout) {
     connect();
 
     ESP_LOGI(WIFI, "Waiting for IP...");
-    xSemaphoreTake(semIP, portMAX_DELAY);
-
-    ESP_LOGI(WIFI, "Connected!");
-    return getIPInfo();
+    if (xSemaphoreTake(semIP, pdMS_TO_TICKS(timeout)) == pdTRUE) {
+        ESP_LOGI(WIFI, "Connected!");
+        return getIPInfo();
+    } else {
+        ESP_LOGE(WIFI, "Timeout waiting for IP");
+        abort();
+    }
 }
 
 void WifiManager::clearCredentials() {
