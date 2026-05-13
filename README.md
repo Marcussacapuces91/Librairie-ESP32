@@ -50,6 +50,6 @@ Quelques fichiers pour me faciliter le travail.
 >
 > ### 5. Sortie attendue
 > - Fournir **un seul bloc de code complet**, header + implémentation dans le même fichier.
-> - Le code doit être directement compilable sous ESP-IDF.
+> - Le code doit être directement compilable sous ESP-IDF V5.
 >
 > Génère maintenant la classe complète.
