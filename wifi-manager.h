@@ -149,8 +149,38 @@ class WifiManager {
  */
     void clearCredentials();
 
+/**
+ * @brief Get the current IP configuration of the STA interface.
+ *
+ * @return const esp_netif_ip_info_t& Reference to the current IP information
+ *         (IP address, netmask, gateway).
+ *
+ * Behavior:
+ *  - Queries the STA network interface for current IP configuration.
+ *  - Returns a static reference to the queried information.
+ *
+ * @note The returned reference points to a static variable. Subsequent calls
+ *       will overwrite the previous result. Copy the data if multiple values
+ *       must be retained simultaneously.
+ */
     const esp_netif_ip_info_t& getIPInfo() const;
 
+/**
+ * @brief Get information about the currently connected access point (AP).
+ *
+ * @return const wifi_ap_record_t& Reference to the AP record containing SSID,
+ *         BSSID, channel, signal strength (RSSI), and authentication mode.
+ *
+ * Behavior:
+ *  - Queries the ESP-IDF WiFi stack for connected AP information.
+ *  - Returns a static reference to the queried AP record.
+ *
+ * @note The returned reference points to a static variable. Subsequent calls
+ *       will overwrite the previous result. Copy the data if multiple values
+ *       must be retained simultaneously.
+ * @warning Should only be called after the device has successfully obtained an IP
+ *          (i.e., after onGotIp() has been triggered).
+ */
     const wifi_ap_record_t& getAPInfo() const;
 
   protected:
