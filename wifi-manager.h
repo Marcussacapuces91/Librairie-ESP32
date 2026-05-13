@@ -14,7 +14,8 @@
  *   3 failed connection attempts.
  * - **Thread-Safe**: Uses FreeRTOS semaphores for synchronization.
  *
- * @author [Your Team]
+ * @author Marc SIBERT
+ * @copyright (c) 2026 by M. SIBERT.
  * @version 1.0
  */
 
@@ -108,20 +109,28 @@ class WifiManager {
     ~WifiManager();
 
 /**
+ * @brief Start WiFi.
+ *
+ * Behavior:
+ *  - Calls esp_wifi_start() to begin WiFi operations.
+ */
+    void connect();
+
+/**
  * @brief Start WiFi and block until an IP address is obtained.
  *
- * @return esp_netif_t* Pointer to the STA network interface with active IP.
+ * @return esp_netif_ip_info_t& Reference to the IP information.
  *
  * Behavior:
  *  - Calls esp_wifi_start() to begin WiFi operations.
  *  - Waits on internal semaphore (xSemaphoreTake with portMAX_DELAY)
  *    until IP_EVENT_STA_GOT_IP is signaled.
- *  - Returns the esp_netif_t* to the caller once connected.
+ *  - Returns the esp_netif_ip_info_t reference to the caller once connected.
  *
  * @note This method blocks the calling task until an IP is obtained.
  *       Use FreeRTOS task awareness when integrating into application logic.
  */
-    esp_netif_t* connect();
+    const esp_netif_ip_info_t& connectAndWaitIP();
 
 /**
  * @brief Erase WiFi credentials stored in NVS (Non-Volatile Storage).
@@ -139,6 +148,10 @@ class WifiManager {
  *       on next connection attempt if no credentials are provided externally.
  */
     void clearCredentials();
+
+    const esp_netif_ip_info_t& getIPInfo() const;
+
+    const wifi_ap_record_t& getAPInfo() const;
 
   protected:
 
@@ -319,7 +332,6 @@ class WifiManager {
 // ============================================================================
 
 WifiManager::WifiManager() :
-    sta_netif( nullptr ),
     semIP( xSemaphoreCreateBinary() ),
     retry( 3 )
 {
@@ -358,15 +370,19 @@ WifiManager::~WifiManager() {
     vSemaphoreDelete(semIP);
 }
 
-esp_netif_t* WifiManager::connect() {
+void WifiManager::connect() {
     ESP_LOGI(WIFI, "Starting WiFi");
     ESP_ERROR_CHECK( esp_wifi_start() );
+}
+
+const esp_netif_ip_info_t& WifiManager::connectAndWaitIP() {
+    connect();
 
     ESP_LOGI(WIFI, "Waiting for IP...");
     xSemaphoreTake(semIP, portMAX_DELAY);
 
     ESP_LOGI(WIFI, "Connected!");
-    return sta_netif;
+    return getIPInfo();
 }
 
 void WifiManager::clearCredentials() {
@@ -381,6 +397,19 @@ void WifiManager::clearCredentials() {
     } else ESP_ERROR_CHECK(err);
 
     ESP_LOGI(WIFI, "WiFi credentials erased.");
+}
+
+const esp_netif_ip_info_t& WifiManager::getIPInfo() const {
+    static esp_netif_ip_info_t ip_info;
+    assert(sta_netif);
+    ESP_ERROR_CHECK( esp_netif_get_ip_info(sta_netif, &ip_info) );
+    return ip_info;
+}
+
+const wifi_ap_record_t& WifiManager::getAPInfo() const {
+    static wifi_ap_record_t ap_record;
+    ESP_ERROR_CHECK( esp_wifi_sta_get_ap_info(&ap_record) );
+    return ap_record;
 }
 
 void WifiManager::startSmartConfig() {
