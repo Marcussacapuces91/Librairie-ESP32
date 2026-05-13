@@ -294,39 +294,39 @@ class WifiManager {
     void onGotIp(const ip_event_got_ip_t& evt);
 
   private:
-    /**
-     * @brief Pointer to the STA (Station) network interface.
-     *
-     * Initialized in constructor via esp_netif_create_default_wifi_sta().
-     * Returned to caller from connect() after IP is acquired.
-     * Deleted in destructor via esp_netif_destroy_default_wifi().
-     */
+/**
+ * @brief Pointer to the STA (Station) network interface.
+ *
+ * Initialized in constructor via esp_netif_create_default_wifi_sta().
+ * Returned to caller from connect() after IP is acquired.
+ * Deleted in destructor via esp_netif_destroy_default_wifi().
+ */
     esp_netif_t* sta_netif;
 
-    /**
-     * @brief Binary semaphore for IP acquisition synchronization.
-     *
-     * Created in constructor: xSemaphoreCreateBinary().
-     * Given (signaled) by onGotIp() when IP_EVENT_STA_GOT_IP is received.
-     * Taken (waited on) by connect() to block until IP is available.
-     * Deleted in destructor: vSemaphoreDelete().
-     *
-     * Allows connect() to block on the calling task while event loop
-     * handles WiFi state transitions asynchronously.
-     */
+/**
+ * @brief Binary semaphore for IP acquisition synchronization.
+ *
+ * Created in constructor: xSemaphoreCreateBinary().
+ * Given (signaled) by onGotIp() when IP_EVENT_STA_GOT_IP is received.
+ * Taken (waited on) by connect() to block until IP is available.
+ * Deleted in destructor: vSemaphoreDelete().
+ *
+ * Allows connect() to block on the calling task while event loop
+ * handles WiFi state transitions asynchronously.
+ */
     SemaphoreHandle_t semIP;
 
-    /**
-     * @brief Connection retry counter for automatic reconnection.
-     *
-     * Initialized to 3 in constructor.
-     * Decremented in onStaDisconnected() on each disconnection event.
-     * Resets to 3 when retries exhausted and SmartConfig is launched.
-     * Allows up to 3 reconnection attempts before falling back to provisioning.
-     *
-     * Permits graceful handling of transient WiFi issues without immediately
-     * requiring user intervention via SmartConfig.
-     */
+/**
+ * @brief Connection retry counter for automatic reconnection.
+ *
+ * Initialized to 3 in constructor.
+ * Decremented in onStaDisconnected() on each disconnection event.
+ * Resets to 3 when retries exhausted and SmartConfig is launched.
+ * Allows up to 3 reconnection attempts before falling back to provisioning.
+ *
+ * Permits graceful handling of transient WiFi issues without immediately
+ * requiring user intervention via SmartConfig.
+ */
     int retry;
 
 /**
