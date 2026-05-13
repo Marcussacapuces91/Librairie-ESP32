@@ -1,5 +1,6 @@
 # Librairie-ESP32
-Quelques fichiers pour me faciliter le travail
+
+Quelques fichiers pour me faciliter le travail.
 
 ## Wifi Manager
 
