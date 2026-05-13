@@ -76,9 +76,11 @@ public:
  * SNTP stack to start automatically.
  * 
  * @param pool NTP server pool address (default: "pool.ntp.org").
+ * @param tz Timezone (default: "UTC0" = utc).
  * @throw Calls abort() if the internal semaphore cannot be created.
  */
-    TimeManager(const char* pool = "pool.ntp.org");
+    TimeManager(const char* pool = "pool.ntp.org",
+                const char* tz = "UTC0");
 
 /**
  * @brief Destructor: ensures safe cleanup of the semaphore.
@@ -100,13 +102,38 @@ public:
     void syncAndWait(const unsigned timeout = 30000);
 
 /**
- * @brief Get current system time formatted as an ISO8601 UTC string.
+ * @brief Configures the system timezone using POSIX standards.
  * 
- * @return std::string containing the time in format "YYYY-MM-DDTHH:MM:SSZ".
+ * @param tz A POSIX-compliant timezone string. 
+ *          Examples: 
+ *          - "CET-1CEST,EuCentral" : Central European Time (France, Germany, etc.)
+ *          - "PST8PDT,PST"         : Pacific Standard Time (USA)
+ *          - "UTC0"                : Coordinated Universal Time (default value)
+ * 
+ * @details
+ * Once set, all subsequent calls to method `getISO8601()` will reflect 
+ * this timezone, including the automatic application of Daylight Saving Time (DST) 
+ * rules defined in the TZ string.
+ * 
+ */    void setTimezone(const char* tz);
+
+/**
+ * @brief Get current system time formatted as an ISO8601 string.
+ * 
+ * @return std::string containing the time in format "YYYY-MM-DDTHH:MM:SS+HHMM".
  * @note Returns the current system time regardless of whether it has 
  *       been synchronized.
  */
-    std::string getISO8601() const;
+    std::string getLocal_ISO8601() const;
+
+/**
+ * @brief Get current system time formatted as an ISO8601 UTC string.
+ * 
+ * @return std::string containing the time in format "YYYY-MM-DDTHH:MM:SS".
+ * @note Returns the current system time regardless of whether it has 
+ *       been synchronized.
+ */
+    std::string getUTC_ISO8601() const;
 
 /**
  * @brief Get the total number of successful NTP synchronizations.
@@ -165,11 +192,14 @@ private:
 // Implementation
 // ============================================================================
 
-TimeManager::TimeManager(const char* pool) :
+TimeManager::TimeManager(const char* pool, const char* tz) :
     semTime( xSemaphoreCreateBinary() ),
     is_synced( false ),
     sync_count( 0 )
 {
+    if (instance != nullptr) {
+        ESP_LOGW(TIME_TAG, "Another TimeManager already exists! This will override the previous instance.");
+    }
     instance = this;
 
     if (semTime == nullptr) {
@@ -178,20 +208,23 @@ TimeManager::TimeManager(const char* pool) :
     }
 
     esp_sntp_config_t sntp_config = ESP_NETIF_SNTP_DEFAULT_CONFIG(pool);
-    sntp_config.smooth_sync = true;
+    // sntp_config.smooth_sync = true;
     sntp_config.start = true;
     sntp_config.sync_cb = sntp_time_callback;
 
     ESP_LOGI(TIME_TAG, "Initializing SNTP with pool: %s", pool);
     ESP_ERROR_CHECK( esp_netif_sntp_init(&sntp_config) );
-//    ESP_ERROR_CHECK( sntp_set_sync_delay(600) );
+
+    setTimezone(tz);
+    sntp_set_sync_interval(30000);
 }
 
 TimeManager::~TimeManager() {
     instance = nullptr;
-    if (semTime != nullptr) {
-        vSemaphoreDelete(semTime);
-    }
+
+    esp_netif_sntp_deinit();
+
+    if (semTime != nullptr) vSemaphoreDelete(semTime);
 }
 
 void TimeManager::syncAndWait(const unsigned timeout) {
@@ -206,30 +239,48 @@ void TimeManager::syncAndWait(const unsigned timeout) {
     }
 }
 
-std::string TimeManager::getISO8601() const {
+void TimeManager::setTimezone(const char* tz) {
+    ESP_LOGI(TIME_TAG, "Setting timezone to: %s", tz);
+    setenv("TZ", tz, 1);
+    tzset(); // Update the internal state based on the new TZ variable    
+}
+
+std::string TimeManager::getLocal_ISO8601() const {
+    time_t now = time(NULL);
+    struct tm local;
+
+    localtime_r(&now, &local);
+
+    char buffer[40];
+    strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S%z", &local);
+
+    return std::string(buffer);
+}
+
+std::string TimeManager::getUTC_ISO8601() const {
     time_t now = time(NULL);
     struct tm utc;
+
     gmtime_r(&now, &utc);
 
     char buffer[30];
-    strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%SZ", &utc);
+    strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", &utc);
 
     return std::string(buffer);
 }
 
 uint32_t TimeManager::getSyncCount() const {
-    return sync_count; 
+    return sync_count.load(); 
 }
 
 bool TimeManager::isSynced() const {
-    return is_synced;
+    return is_synced.load();
 }
 
 void TimeManager::sntp_time_callback(struct timeval *tv) {
     if (tv == nullptr) return;
 
     if (tv->tv_sec) {
-        assert(instance);
         if (instance) {
             instance->is_synced = true;
             instance->sync_count++;
