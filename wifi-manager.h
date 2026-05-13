@@ -1,5 +1,21 @@
 /**
+ * @file wifi-manager.h
+ * @brief High-level RAII WiFi controller for ESP32 (STA mode + SmartConfig).
  *
+ * Provides a modern C++ wrapper around ESP-IDF WiFi APIs with automatic
+ * initialization, cleanup, and SmartConfig provisioning.
+ *
+ * @details
+ * - **RAII Pattern**: Automatic initialization in constructor, cleanup in destructor.
+ *   No global state, no singletons.
+ * - **Event-Driven**: All WiFi events are handled via protected virtual methods
+ *   that can be overridden in derived classes.
+ * - **SmartConfig Support**: Automatic fallback to ESP-Touch provisioning after
+ *   3 failed connection attempts.
+ * - **Thread-Safe**: Uses FreeRTOS semaphores for synchronization.
+ *
+ * @author [Your Team]
+ * @version 1.0
  */
 
 #pragma once
@@ -15,148 +31,284 @@ constexpr const char WIFI[] = "WIFI";
  * @class WifiManager
  * @brief High-level RAII WiFi controller for ESP32 (STA mode + SmartConfig).
  *
- * [...]
+ * ## RAII Pattern
+ * - **Constructor**: Initializes esp_netif, esp_wifi, STA interface, event handlers,
+ *   and synchronization semaphore. WiFi is NOT started yet; call connect() to begin.
+ * - **Destructor**: Safely unregisters all handlers, stops WiFi, deinits the stack,
+ *   and frees the semaphore. Designed to be called without errors even if connect()
+ *   was never called.
  *
- * ## Inheritance & Extension
- * The class is designed to be extensible:
- *  - All event-related methods are `protected` so they can be overridden.
- *  - A derived class may customize behavior for WiFi events (start, disconnect,
- *    SmartConfig, IP acquisition) without modifying the core logic.
+ * ## SmartConfig Provisioning
+ * When the device fails to connect after 3 attempts (or if no SSID is configured):
+ *  1. SmartConfig (ESP-Touch) is automatically launched.
+ *  2. A smartphone app sends WiFi credentials over a special encoded signal.
+ *  3. Once credentials are received, the device applies them and reconnects.
+ *  4. SmartConfig stops automatically after successful connection.
  *
- * Example:
+ * ## Extensibility & Inheritance
+ * All event-related methods (`startSmartConfig`, `onStaStart`, `onStaDisconnected`,
+ * `onGotSsidPass`, `onGotIp`) are `protected virtual`, allowing subclasses to:
+ *  - Add custom behavior (LED blinking, metrics, logging, persistent storage).
+ *  - Modify event handling logic without altering core WiFi state machine.
+ *  - Call the parent implementation to maintain standard behavior.
+ *
+ * **Example:**
  * ```cpp
- * class MyWifi : public WifiManager {
+ * class MyWifiManager : public WifiManager {
  * protected:
  *     void onGotIp(const ip_event_got_ip_t& evt) override {
- *         WifiManager::onGotIp(evt);   // keep base behavior
- *         printf("Custom action: IP acquired!\\n");
+ *         WifiManager::onGotIp(evt);  // Call parent to maintain behavior
+ *         startServices();               // Custom action after IP acquired
+ *         ledBlink(GREEN);               // Visual feedback
+ *     }
+ *
+ *     void onStaDisconnected(const wifi_event_sta_disconnected_t& evt) override {
+ *         logMetric("disconnection_reason", evt.reason);  // Custom logging
+ *         WifiManager::onStaDisconnected(evt);            // Standard retry logic
  *     }
  * };
  * ```
+ *
+ * ## Thread Safety
+ * - Constructor must be called from the task that initializes ESP-IDF event loop.
+ * - Event handlers are called from the event loop task (internally handles locking).
+ * - connect() may block the calling task waiting for IP acquisition.
  */
 class WifiManager {
   public:
+
 /**
  * @brief Construct the WifiManager and initialize WiFi stack.
  *
  * Initializes:
  *  - esp_netif
- *  - esp_wifi
- *  - STA interface
- *  - event handlers
- *  - internal semaphore
+ *  - esp_wifi with STA mode configuration
+ *  - STA network interface
+ *  - event handlers for WiFi and IP events
+ *  - FreeRTOS binary semaphore for IP acquisition synchronization
  *
  * WiFi is NOT started yet. Call connect() to start it.
+ *
+ * @throw Asserts on allocation failure (semaphore creation, netif creation).
  */
     WifiManager();
 
 /**
  * @brief Destructor: unregister handlers, stop WiFi, free resources.
  *
- * Ensures:
- *  - WiFi is stopped (if started)
- *  - esp_wifi is deinitialized
- *  - event handlers are unregistered
- *  - semaphore is deleted
+ * Ensures safe cleanup in this order:
+ *  1. Unregister all event handlers (WIFI_EVENT_STA_START, STA_DISCONNECTED,
+ *     SC_EVENT_GOT_SSID_PSWD, IP_EVENT_STA_GOT_IP).
+ *  2. Stop WiFi (ignores ESP_ERR_WIFI_NOT_STARTED if not running).
+ *  3. Deinit the WiFi module (esp_wifi_deinit).
+ *  4. Delete the semaphore (vSemaphoreDelete).
+ *
+ * Safe to call even if connect() was never called or if WiFi is already stopped.
  */
     ~WifiManager();
 
 /**
  * @brief Start WiFi and block until an IP address is obtained.
  *
- * @return esp_netif_t* The STA network interface.
+ * @return esp_netif_t* Pointer to the STA network interface with active IP.
  *
  * Behavior:
- *  - Calls esp_wifi_start()
- *  - Waits on semaphore until IP_EVENT_STA_GOT_IP
- *  - Returns the netif once connected
+ *  - Calls esp_wifi_start() to begin WiFi operations.
+ *  - Waits on internal semaphore (xSemaphoreTake with portMAX_DELAY)
+ *    until IP_EVENT_STA_GOT_IP is signaled.
+ *  - Returns the esp_netif_t* to the caller once connected.
+ *
+ * @note This method blocks the calling task until an IP is obtained.
+ *       Use FreeRTOS task awareness when integrating into application logic.
  */
     esp_netif_t* connect();
 
 /**
- * @brief Erase WiFi credentials stored in NVS.
+ * @brief Erase WiFi credentials stored in NVS (Non-Volatile Storage).
  *
  * Behavior:
- *  - Stops WiFi if running (ignores ESP_ERR_WIFI_NOT_STARTED)
- *  - Calls esp_wifi_restore() to erase NVS credentials
- *  - Restarts WiFi if it was previously running
+ *  - Stops WiFi if currently running (ignores ESP_ERR_WIFI_NOT_STARTED).
+ *  - Calls esp_wifi_restore() to erase stored SSID and password from NVS.
+ *  - Restarts WiFi in STA mode if it was previously running.
+ *  - If WiFi was not running, only erases credentials without restart.
  *
- * Safe to call BEFORE connect().
+ * Safe to call **before** connect() is ever called, or after the device is
+ * fully connected. Useful for factory reset or credential renewal flows.
+ *
+ * @post WiFi credentials are erased. Device will fall back to SmartConfig
+ *       on next connection attempt if no credentials are provided externally.
  */
     void clearCredentials();
 
   protected:
+
 /**
- * @brief Start SmartConfig (ESP-Touch).
+ * @brief Start SmartConfig (ESP-Touch) provisioning mode.
  *
- * Designed to be overridden in derived classes to add custom behavior
- * (LED blinking, UI feedback, logging, etc.).
+ * Designed to be overridden in derived classes to add custom behavior:
+ *  - LED blinking or color feedback.
+ *  - UI notifications or log messages.
+ *  - Custom SmartConfig type or configuration.
+ *
+ * Default implementation:
+ *  - Sets SmartConfig type to SC_TYPE_ESPTOUCH.
+ *  - Starts SmartConfig with default configuration.
+ *
+ * Called automatically when:
+ *  - No SSID is configured at STA start.
+ *  - 3 connection attempts have failed.
+ *
+ * @details Override this to customize SmartConfig behavior. Always call
+ *          the parent implementation to ensure standard SmartConfig setup.
  */
     void startSmartConfig();
 
 /**
- * @brief Handle WIFI_EVENT_STA_START.
+ * @brief Handle WIFI_EVENT_STA_START event.
  *
- * Attempts to connect using stored credentials.
- * If no SSID is available → SmartConfig is started.
+ * Attempts to connect using stored credentials from NVS.
+ * If no SSID is configured, automatically starts SmartConfig provisioning.
  *
- * This method is `protected` to allow overriding in derived classes
- * (e.g., custom logging, metrics, LED indicators).
+ * This method is `protected virtual` to allow overriding in derived classes
+ * for custom behavior such as:
+ *  - Custom logging or metrics collection.
+ *  - LED indicators (starting, attempting).
+ *  - Pre-connection validation or state setup.
+ *
+ * Default implementation:
+ *  - Calls esp_wifi_connect() to use stored credentials.
+ *  - If ESP_ERR_WIFI_SSID is returned, starts SmartConfig.
  */
     void onStaStart();
 
 /**
- * @brief Handle WIFI_EVENT_STA_DISCONNECTED.
+ * @brief Handle WIFI_EVENT_STA_DISCONNECTED event.
  *
- * @param evt Disconnection event details.
+ * @param evt Disconnection event details (includes disconnection reason code).
  *
- * Retries connection up to `retry` times.
- * Falls back to SmartConfig when retries are exhausted.
+ * Implements automatic retry logic:
+ *  - Retries connection up to 3 times after disconnection.
+ *  - Falls back to SmartConfig when retries are exhausted.
+ *  - Resets retry counter for next connection cycle.
  *
- * This method is `protected` so subclasses may override it to implement
- * custom reconnection strategies or additional diagnostics.
+ * This method is `protected virtual` so subclasses may override it to:
+ *  - Implement custom reconnection strategies (backoff, max delay).
+ *  - Log disconnection reasons for diagnostics.
+ *  - Perform cleanup or state reset on unexpected disconnections.
+ *
+ * Default implementation:
+ *  - Decrements internal retry counter.
+ *  - If retries remain, calls esp_wifi_connect() again.
+ *  - If retries exhausted, resets counter to 3 and launches SmartConfig.
+ *
+ * @note The retry counter is independent per disconnect event and resets
+ *       after SmartConfig provisioning or successful reconnection.
  */
     void onStaDisconnected(const wifi_event_sta_disconnected_t& evt);
 
 /**
- * @brief Handle SC_EVENT_GOT_SSID_PSWD.
+ * @brief Handle SC_EVENT_GOT_SSID_PSWD event (SmartConfig credentials received).
  *
- * @param evt SmartConfig credentials.
+ * @param evt SmartConfig event data containing provisioned SSID and password.
  *
- * Applies new credentials, reconnects, and stops SmartConfig.
+ * Applies new credentials and reconnects:
+ *  1. Copies SSID and password from event into wifi_config_t.
+ *  2. Stops SmartConfig (esp_smartconfig_stop).
+ *  3. Disconnects current connection if active.
+ *  4. Sets new WiFi configuration (esp_wifi_set_config).
+ *  5. Initiates reconnection with new credentials.
  *
- * Overridable to add custom behavior when new credentials are received
- * (e.g., persisting metadata, UI feedback, logging).
+ * Overridable to add custom behavior when new credentials are received:
+ *  - Persist credentials to external storage (EEPROM, custom NVS).
+ *  - Send provisioning success notification to backend.
+ *  - Log provisioning metadata (timestamp, app version, device ID).
+ *  - Update UI to show "Connecting with new WiFi" state.
+ *
+ * @post SmartConfig is stopped. Device reconnects with new credentials.
+ *       If connection succeeds, IP_EVENT_STA_GOT_IP will be signaled.
  */
     void onGotSsidPass(const smartconfig_event_got_ssid_pswd_t& evt);
 
 /**
- * @brief Handle IP_EVENT_STA_GOT_IP.
+ * @brief Handle IP_EVENT_STA_GOT_IP event (device obtained IP address).
  *
- * @param evt IP information.
+ * @param evt IP event data containing IP address, netmask, gateway, etc.
  *
- * Releases the semaphore to unblock connect().
+ * Releases the semaphore to unblock the connect() method call.
  *
- * Overridable to add custom actions when the device obtains an IP
- * (e.g., start services, notify user, blink LED).
+ * Overridable to add custom actions when the device gains network connectivity:
+ *  - Start background services (OTA, time sync, telemetry).
+ *  - Notify application via callback or event system.
+ *  - Blink LED or update UI to show "Connected" state.
+ *  - Log connection metrics (signal strength, channel, authentication type).
+ *
+ * Default implementation:
+ *  - Logs the acquired IP address.
+ *  - Signals the semaphore so connect() returns to caller.
+ *
+ * @note Always call the parent implementation to maintain semaphore signaling.
  */
     void onGotIp(const ip_event_got_ip_t& evt);
 
   private:
-    // Internal state
+    /**
+     * @brief Pointer to the STA (Station) network interface.
+     *
+     * Initialized in constructor via esp_netif_create_default_wifi_sta().
+     * Returned to caller from connect() after IP is acquired.
+     * Deleted in destructor via esp_netif_destroy_default_wifi().
+     */
     esp_netif_t* sta_netif;
+
+    /**
+     * @brief Binary semaphore for IP acquisition synchronization.
+     *
+     * Created in constructor: xSemaphoreCreateBinary().
+     * Given (signaled) by onGotIp() when IP_EVENT_STA_GOT_IP is received.
+     * Taken (waited on) by connect() to block until IP is available.
+     * Deleted in destructor: vSemaphoreDelete().
+     *
+     * Allows connect() to block on the calling task while event loop
+     * handles WiFi state transitions asynchronously.
+     */
     SemaphoreHandle_t semIP;
+
+    /**
+     * @brief Connection retry counter for automatic reconnection.
+     *
+     * Initialized to 3 in constructor.
+     * Decremented in onStaDisconnected() on each disconnection event.
+     * Resets to 3 when retries exhausted and SmartConfig is launched.
+     * Allows up to 3 reconnection attempts before falling back to provisioning.
+     *
+     * Permits graceful handling of transient WiFi issues without immediately
+     * requiring user intervention via SmartConfig.
+     */
     int retry;
 
 /**
- * @brief Static event handler registered with ESP-IDF.
+ * @brief Static event handler registered with ESP-IDF event loop.
  *
- * Dispatches events to the correct WifiManager instance.
+ * @param arg Opaque pointer to WifiManager instance (cast to `this` internally).
+ * @param event_base Event base identifier (WIFI_EVENT, IP_EVENT, or SC_EVENT).
+ * @param event_id Specific event ID within the event base.
+ * @param data Event-specific payload (cast to appropriate struct type).
  *
- * @param arg Pointer to WifiManager instance (this)
- * @param event_base WIFI_EVENT / IP_EVENT / SC_EVENT
- * @param event_id Event ID
- * @param data Event-specific data
+ * Dispatches ESP-IDF events to the correct WifiManager instance by:
+ *  1. Casting `arg` to WifiManager* to recover the instance.
+ *  2. Checking event_base and event_id to determine event type.
+ *  3. Calling the appropriate protected method (onStaStart, onStaDisconnected, etc.).
+ *
+ * Registered for these events:
+ *  - WIFI_EVENT_STA_START → onStaStart()
+ *  - WIFI_EVENT_STA_DISCONNECTED → onStaDisconnected()
+ *  - SC_EVENT_GOT_SSID_PSWD → onGotSsidPass()
+ *  - IP_EVENT_STA_GOT_IP → onGotIp()
+ *
+ * @details Static methods cannot be virtual, so this dispatcher pattern
+ *          is necessary to enable polymorphic event handling in derived classes.
+ *          The instance pointer is passed via the `arg` parameter during
+ *          handler registration.
  */
     static void eventHandler(void* arg, esp_event_base_t event_base, int32_t event_id, void* data);
 
@@ -242,13 +394,13 @@ void WifiManager::onStaStart() {
     ESP_LOGI(WIFI, "STA start → connecting using current credentials...");
 
     // try to connect using stored credentials
-    const auto err = esp_wifi_connect(); 
+    const auto err = esp_wifi_connect();
 
     // Note: ESP_ERR_WIFI_SSID is almost never returned in practice
     if (err == ESP_ERR_WIFI_SSID) {
       ESP_LOGE(WIFI, "Error connecting: No SSID defined!");
       startSmartConfig();
-    } else 
+    } else
       ESP_ERROR_CHECK(err);
 }
 
@@ -259,6 +411,7 @@ void WifiManager::onStaDisconnected(const wifi_event_sta_disconnected_t& evt) {
         ESP_LOGI(WIFI, "Retrying (%d left)", retry);
         ESP_ERROR_CHECK( esp_wifi_connect() );
     } else {
+        // Retries exhausted, reset counter and start SmartConfig
         retry = 3;
         startSmartConfig();
     }
