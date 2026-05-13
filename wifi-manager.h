@@ -106,7 +106,7 @@ class WifiManager {
  *
  * Safe to call even if connect() was never called or if WiFi is already stopped.
  */
-    ~WifiManager();
+    virtual ~WifiManager();
 
 /**
  * @brief Start WiFi.
@@ -125,12 +125,12 @@ class WifiManager {
  *  - Calls esp_wifi_start() to begin WiFi operations.
  *  - Waits on internal semaphore (xSemaphoreTake with portMAX_DELAY)
  *    until IP_EVENT_STA_GOT_IP is signaled.
- *  - Returns the esp_netif_ip_info_t reference to the caller once connected.
+ *  - Returns a esp_netif_ip_info_t copy to the caller once connected.
  *
  * @note This method blocks the calling task until an IP is obtained.
  *       Use FreeRTOS task awareness when integrating into application logic.
  */
-    const esp_netif_ip_info_t& connectAndWaitIP();
+    esp_netif_ip_info_t connectAndWaitIP();
 
 /**
  * @brief Erase WiFi credentials stored in NVS (Non-Volatile Storage).
@@ -152,36 +152,29 @@ class WifiManager {
 /**
  * @brief Get the current IP configuration of the STA interface.
  *
- * @return const esp_netif_ip_info_t& Reference to the current IP information
+ * @return esp_netif_ip_info_t Copy of the current IP information
  *         (IP address, netmask, gateway).
  *
  * Behavior:
  *  - Queries the STA network interface for current IP configuration.
- *  - Returns a static reference to the queried information.
- *
- * @note The returned reference points to a static variable. Subsequent calls
- *       will overwrite the previous result. Copy the data if multiple values
- *       must be retained simultaneously.
+ *  - Returns a copy of the queried information.
  */
-    const esp_netif_ip_info_t& getIPInfo() const;
+    esp_netif_ip_info_t getIPInfo() const;
 
 /**
  * @brief Get information about the currently connected access point (AP).
  *
- * @return const wifi_ap_record_t& Reference to the AP record containing SSID,
+ * @return wifi_ap_record_t Copy of the AP record containing SSID,
  *         BSSID, channel, signal strength (RSSI), and authentication mode.
  *
  * Behavior:
  *  - Queries the ESP-IDF WiFi stack for connected AP information.
- *  - Returns a static reference to the queried AP record.
+ *  - Returns a copy of the queried AP record.
  *
- * @note The returned reference points to a static variable. Subsequent calls
- *       will overwrite the previous result. Copy the data if multiple values
- *       must be retained simultaneously.
  * @warning Should only be called after the device has successfully obtained an IP
  *          (i.e., after onGotIp() has been triggered).
  */
-    const wifi_ap_record_t& getAPInfo() const;
+    wifi_ap_record_t getAPInfo() const;
 
   protected:
 
@@ -405,7 +398,7 @@ void WifiManager::connect() {
     ESP_ERROR_CHECK( esp_wifi_start() );
 }
 
-const esp_netif_ip_info_t& WifiManager::connectAndWaitIP() {
+esp_netif_ip_info_t WifiManager::connectAndWaitIP() {
     connect();
 
     ESP_LOGI(WIFI, "Waiting for IP...");
@@ -429,15 +422,15 @@ void WifiManager::clearCredentials() {
     ESP_LOGI(WIFI, "WiFi credentials erased.");
 }
 
-const esp_netif_ip_info_t& WifiManager::getIPInfo() const {
-    static esp_netif_ip_info_t ip_info;
+esp_netif_ip_info_t WifiManager::getIPInfo() const {
+    esp_netif_ip_info_t ip_info;
     assert(sta_netif);
     ESP_ERROR_CHECK( esp_netif_get_ip_info(sta_netif, &ip_info) );
     return ip_info;
 }
 
-const wifi_ap_record_t& WifiManager::getAPInfo() const {
-    static wifi_ap_record_t ap_record;
+wifi_ap_record_t WifiManager::getAPInfo() const {
+    wifi_ap_record_t ap_record;
     ESP_ERROR_CHECK( esp_wifi_sta_get_ap_info(&ap_record) );
     return ap_record;
 }
