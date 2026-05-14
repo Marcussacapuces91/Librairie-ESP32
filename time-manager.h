@@ -197,8 +197,11 @@ TimeManager::TimeManager(const char* pool, const char* tz) :
     is_synced( false ),
     sync_count( 0 )
 {
+    assert(pool);
+    assert(tz);
     if (instance != nullptr) {
-        ESP_LOGW(TIME_TAG, "Another TimeManager already exists! This will override the previous instance.");
+        ESP_LOGE(TIME_TAG, "Another TimeManager already exists!");
+        abort();
     }
     instance = this;
 
@@ -208,7 +211,6 @@ TimeManager::TimeManager(const char* pool, const char* tz) :
     }
 
     esp_sntp_config_t sntp_config = ESP_NETIF_SNTP_DEFAULT_CONFIG(pool);
-    // sntp_config.smooth_sync = true;
     sntp_config.start = true;
     sntp_config.sync_cb = sntp_time_callback;
 
@@ -216,14 +218,12 @@ TimeManager::TimeManager(const char* pool, const char* tz) :
     ESP_ERROR_CHECK( esp_netif_sntp_init(&sntp_config) );
 
     setTimezone(tz);
-    sntp_set_sync_interval(30000);
+    // sntp_set_sync_interval(30000);
 }
 
 TimeManager::~TimeManager() {
     instance = nullptr;
-
     esp_netif_sntp_deinit();
-
     if (semTime != nullptr) vSemaphoreDelete(semTime);
 }
 
@@ -288,7 +288,9 @@ void TimeManager::sntp_time_callback(struct timeval *tv) {
             ESP_LOGI(TIME_TAG, "NTP Update received! Sync #%u | Unix: %ld",
                      instance->sync_count.load(), tv->tv_sec);
 
-            xSemaphoreGive(instance->semTime);
+            if (xSemaphoreGive(instance->semTime) != pdTRUE) 
+                ESP_LOGE(TIME_TAG, "Failed to give semaphore");
+
         }
     }
 }
