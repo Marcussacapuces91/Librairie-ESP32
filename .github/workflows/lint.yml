@@ -19,16 +19,26 @@ jobs:
       - name: Install clang tools
         run: sudo apt-get update && sudo apt-get install -y clang-format clang-tidy
 
-      - name: Run clang-format (check only)
+      # --- CLANG-FORMAT CHECK WITH DIFF ---
+      - name: Run clang-format (diff mode)
         run: |
-          clang-format --version
-          FORMAT_ERRORS=$(find . -regex '.*\.\(cpp\|h\)' -exec clang-format -style=file -output-replacements-xml {} \; | grep -c "<replacement " || true)
-          if [ "$FORMAT_ERRORS" -ne 0 ]; then
-            echo "::error ::clang-format found formatting issues"
-            exit 1
-          fi
+          echo "Running clang-format..."
+          FILES=$(find . -regex '.*\.\(cpp\|h\)')
+          for f in $FILES; do
+            DIFF=$(clang-format -style=file $f | diff -u $f - || true)
+            if [ ! -z "$DIFF" ]; then
+              echo "::error file=$f::clang-format issues detected"
+              echo "$DIFF"
+              EXIT_CODE=1
+            fi
+          done
+          exit ${EXIT_CODE:-0}
 
+      # --- CLANG-TIDY WITH ANNOTATIONS ---
       - name: Run clang-tidy
         run: |
-          clang-tidy --version
-          find . -regex '.*\.\(cpp\)' -exec clang-tidy {} -- -std=c++17 \;
+          echo "Running clang-tidy..."
+          FILES=$(find . -regex '.*\.\(cpp\)')
+          for f in $FILES; do
+            clang-tidy $f -- -std=c++17 2>&1 | sed -E 's/^([^:]+):([0-9]+):([0-9]+): (.*)/::error file=\1,line=\2,col=\3::\4/'
+          done
