@@ -1,4 +1,4 @@
-# Librairie ESP32
+# Bibliothèques ESP32
 
 <p align="center">
   <img src="https://img.shields.io/badge/platform-ESP32--S3-blue" />
