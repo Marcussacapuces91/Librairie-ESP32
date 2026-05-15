@@ -2,7 +2,47 @@
 
 Quelques fichiers pour me faciliter le travail.
 
-## Wifi Manager
+## WiFi Manager
+
+[wifi-manager.h](wifi-manager.h) est un contrôleur WiFi moderne et entièrement RAII conçu pour l'ESP32 en mode STA avec provisionnement SmartConfig automatique.
+
+### Caractéristiques principales
+
+- **Pattern RAII** : Initialisation automatique du stack WiFi dans le constructeur, nettoyage complet dans le destructeur. Aucun état global, pas de singleton.
+- **Événementiel** : Tous les événements WiFi sont gérés via des méthodes virtuelles protégées surchargeables dans les classes dérivées.
+- **SmartConfig intégré** : Bascule automatique vers la provisionnement ESP-Touch après 3 tentatives de connexion échouées.
+- **Thread-safe** : Utilise les sémaphores FreeRTOS pour la synchronisation.
+
+### Utilisation basique
+
+```cpp
+#include "wifi-manager.h"
+
+WifiManager wifi;
+
+void setup() {
+    // Connecter et attendre une adresse IP (timeout de 30 secondes par défaut)
+    auto ip_info = wifi.connectAndWaitIP();
+    
+    // Récupérer les informations de l'AP connecté
+    auto ap = wifi.getAPInfo();
+}
+```
+
+### Extensibilité
+
+La classe est conçue pour être étendue facilement. Surcharger les méthodes virtuelles protégées pour ajouter des comportements personnalisés (LEDs, logging, stockage persistant, etc.) :
+
+```cpp
+class MyWifiManager : public WifiManager {
+protected:
+    void onGotIp(const ip_event_got_ip_t& evt) override {
+        WifiManager::onGotIp(evt);  // Appeler le parent
+        startMyServices();            // Actions personnalisées
+        ledBlink(GREEN);              // Retour visuel
+    }
+};
+```
 
 ## Time Manager
 
