@@ -11,22 +11,12 @@
  * - **Modern C++ Design**: Strongly typed constants, encapsulated resources,
  *   no global variables, no macros.
  * - **RAII-Friendly**: The constructor builds the internal buses and panel
- *   objects; hardware initialization is performed in begin(), and cleanup
- *   occurs in the destructor.
+ *   objects; cleanup occurs in the destructor. begin() is still necessary.
  * - **Version-Aware**: LEDC backlight control automatically adapts to
- *   ESP32 Arduino Core v2 or v3 APIs.
+ *   ESP32 Arduino Core v3 APIs.
  * - **Extendable**: The class can be inherited to add touch support,
  *   UI layers, or custom drawing helpers.
  * - **Safe Backlight Control**: Brightness is clamped to the valid 0–255 range.
- *
- * Typical usage:
- * @code
- * ESP32_4848S040_Driver display(200);
- * display.begin();
- * display.fillScreen(BLACK);
- * display.setCursor(100, 200);
- * display.print("Hello!");
- * @endcode
  *
  * @author Marc SIBERT
  * @copyright (c) 2026 by M. SIBERT.
@@ -139,5 +129,5 @@ ESP32_4848S040_Driver::~ESP32_4848S040_Driver() {
 }
 
 void ESP32_4848S040_Driver::setBrightness(const byte value) {
-    ledcWrite(GFX_BL, value);
+    ledcWrite(GFX_BL, (value > 255 ? 255 : value));
 }
