@@ -1,0 +1,33 @@
+name: C++ Lint
+
+on:
+  push:
+    paths:
+      - "**/*.h"
+      - "**/*.cpp"
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install clang tools
+        run: sudo apt-get update && sudo apt-get install -y clang-format clang-tidy
+
+      - name: Run clang-format (check only)
+        run: |
+          clang-format --version
+          FORMAT_ERRORS=$(find . -regex '.*\.\(cpp\|h\)' -exec clang-format -style=file -output-replacements-xml {} \; | grep -c "<replacement " || true)
+          if [ "$FORMAT_ERRORS" -ne 0 ]; then
+            echo "::error ::clang-format found formatting issues"
+            exit 1
+          fi
+
+      - name: Run clang-tidy
+        run: |
+          clang-tidy --version
+          find . -regex '.*\.\(cpp\|h\)' -exec clang-tidy {} -- -std=c++17 \;
