@@ -19,26 +19,40 @@ jobs:
       - name: Install clang tools
         run: sudo apt-get update && sudo apt-get install -y clang-format clang-tidy
 
-      # --- CLANG-FORMAT CHECK WITH DIFF ---
-      - name: Run clang-format (diff mode)
+      # --- CLANG-FORMAT WITH GITHUB ANNOTATIONS ---
+      - name: Run clang-format with annotations
         run: |
           echo "Running clang-format..."
           FILES=$(find . -regex '.*\.\(cpp\|h\)')
+          EXIT_CODE=0
+
           for f in $FILES; do
             DIFF=$(clang-format -style=file $f | diff -u $f - || true)
+
             if [ ! -z "$DIFF" ]; then
-              echo "::error file=$f::clang-format issues detected"
+              echo "::group::clang-format issues in $f"
               echo "$DIFF"
+              echo "::endgroup::"
+
+              # Parse diff to extract line numbers
+              echo "$DIFF" | grep -E "^@@ " | while read -r line; do
+                # Extract line number after the + sign
+                LINE=$(echo "$line" | sed -E 's/^@@ .* \+([0-9]+).*/\1/')
+                echo "::error file=$f,line=$LINE::clang-format issue detected"
+              done
+
               EXIT_CODE=1
             fi
           done
-          exit ${EXIT_CODE:-0}
+
+          exit $EXIT_CODE
 
       # --- CLANG-TIDY WITH ANNOTATIONS ---
-      - name: Run clang-tidy
+      - name: Run clang-tidy with annotations
         run: |
           echo "Running clang-tidy..."
           FILES=$(find . -regex '.*\.\(cpp\)')
           for f in $FILES; do
-            clang-tidy $f -- -std=c++17 2>&1 | sed -E 's/^([^:]+):([0-9]+):([0-9]+): (.*)/::error file=\1,line=\2,col=\3::\4/'
+            clang-tidy $f -- -std=c++17 2>&1 \
+              | sed -E 's/^([^:]+):([0-9]+):([0-9]+): (.*)/::error file=\1,line=\2,col=\3::\4/'
           done
