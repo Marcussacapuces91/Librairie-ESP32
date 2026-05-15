@@ -1,18 +1,32 @@
 /**
  * @file driver-esp32-4848S040.h
- * @brief High-level driver for controlling a 480x480 ST7701 RGB panel using the ESP32-S3.
+ * @brief High-level driver for the ESP32-S3 controlling a 480x480 ST7701 RGB panel.
  *
- * Provides a modern C++ wrapper around GFX_Arduino class.
- * It includes methods for initialization, setting brightness, and managing backlight control.
+ * Provides a modern C++ wrapper around Arduino_RGB_Display, encapsulating:
+ *  - RGB panel configuration and timing
+ *  - ST7701 initialization via SWSPI command bus
+ *  - Backlight control using LEDC PWM (ESP32 Arduino Core v2 & v3 compatible)
  *
  * @details
- * - **RAII Pattern**: Automatic initialization in constructor, cleanup in destructor.
- *   No global state, no singletons.
- * - **Event-Driven**: All WiFi events are handled via protected virtual methods
- *   that can be overridden in derived classes.
- * - **SmartConfig Support**: Automatic fallback to ESP-Touch provisioning after
- *   3 failed connection attempts.
- * - **Thread-Safe**: Uses FreeRTOS semaphores for synchronization.
+ * - **Modern C++ Design**: Strongly typed constants, encapsulated resources,
+ *   no global variables, no macros.
+ * - **RAII-Friendly**: The constructor builds the internal buses and panel
+ *   objects; hardware initialization is performed in begin(), and cleanup
+ *   occurs in the destructor.
+ * - **Version-Aware**: LEDC backlight control automatically adapts to
+ *   ESP32 Arduino Core v2 or v3 APIs.
+ * - **Extendable**: The class can be inherited to add touch support,
+ *   UI layers, or custom drawing helpers.
+ * - **Safe Backlight Control**: Brightness is clamped to the valid 0–255 range.
+ *
+ * Typical usage:
+ * @code
+ * ESP32_4848S040_Driver display(200);
+ * display.begin();
+ * display.fillScreen(BLACK);
+ * display.setCursor(100, 200);
+ * display.print("Hello!");
+ * @endcode
  *
  * @author Marc SIBERT
  * @copyright (c) 2026 by M. SIBERT.
