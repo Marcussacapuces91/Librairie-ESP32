@@ -1,4 +1,23 @@
-
+/**
+ * @file driver-esp32-4848S040.h
+ * @brief High-level driver for controlling a 480x480 ST7701 RGB panel using the ESP32-S3.
+ *
+ * Provides a modern C++ wrapper around GFX_Arduino class.
+ * It includes methods for initialization, setting brightness, and managing backlight control.
+ *
+ * @details
+ * - **RAII Pattern**: Automatic initialization in constructor, cleanup in destructor.
+ *   No global state, no singletons.
+ * - **Event-Driven**: All WiFi events are handled via protected virtual methods
+ *   that can be overridden in derived classes.
+ * - **SmartConfig Support**: Automatic fallback to ESP-Touch provisioning after
+ *   3 failed connection attempts.
+ * - **Thread-Safe**: Uses FreeRTOS semaphores for synchronization.
+ *
+ * @author Marc SIBERT
+ * @copyright (c) 2026 by M. SIBERT.
+ * @version 1.0
+ */
 
 #pragma once
 
@@ -35,58 +54,22 @@ public:
  *
  * @param brightness Initial backlight brightness (0–255).
  */
-    ESP32_4848S040_Driver(const byte brightness = 255) :
-        bus(
-            GFX_NOT_DEFINED,  // DC not used
-            39,               // CS: chip select
-            48,               // SCK: software SPI clock
-            47,               // MOSI: software SPI data
-            GFX_NOT_DEFINED   // MISO not used
-        ),
-        rgbpanel(
-            /* DE, VSYNC, HSYNC, PCLK */ 18, 17, 16, 21,
-            /* R0..R4 */ 11, 12, 13, 14, 0,
-            /* G0..G5 */ 8, 20, 3, 46, 9, 10,
-            /* B0..B4 */ 4, 5, 6, 7, 15,
-            /* hsync_pol, hfp, hpw, hbp */ 1, 10, 8, 50,   // horizontal timing parameters
-            /* vsync_pol, vfp, vpw, vbp */ 1, 10, 8, 20,   // vertical timing parameters
-            /* pclk_active_neg */ 0,                       // PCLK polarity
-            /* prefer_speed */ 12000000,                   // pixel clock frequency
-            /* big_endian */ false,                        // standard byte order
-            /* de_idle_high, pclk_idle_high, bounce_buf */ 0, 0, 0
-        ),
-        Arduino_RGB_Display(
-            480, 480,                   // Panel resolution
-            &rgbpanel,                  // RGB interface
-            0,                          // No rotation
-            true,                       // Automatic frame buffer flush
-            &bus,                       // Command bus
-            GFX_NOT_DEFINED,            // No dedicated reset pin
-            st7701_type9_init_operations,
-            sizeof(st7701_type9_init_operations)
-        )
-    {
-        ledcAttach(GFX_BL, PWM_FREQ, PWM_BITS);
-        setBrightness(brightness);
-    }
+    ESP32_4848S040_Driver(const byte brightness = 255);
 
 /**
  * @brief Destructor: releases LEDC resources.
  *
  * Detaches the PWM channel used for the backlight.
  */
-    virtual ~ESP32_4848S040_Driver() {
-        ledcDetach(GFX_BL);
-    }
+    virtual ~ESP32_4848S040_Driver();
 
 /**
  * @brief Set the backlight brightness.
  *
  * @param value Brightness level (0–255).
  */
-    void setBrightness(const byte value) {
-        ledcWrite(GFX_BL, value);
-    }
+    inline
+    void setBrightness(const byte value);
 
 private:
     // --- BACKLIGHT CONTROL via PWM (LEDC) ---
@@ -97,3 +80,50 @@ private:
     Arduino_SWSPI bus;                          ///< Command bus for ST7701
     Arduino_ESP32RGBPanel rgbpanel;             ///< RGB pixel bus
 };
+
+// ============================================================================
+// Implementation
+// ============================================================================
+
+ESP32_4848S040_Driver::ESP32_4848S040_Driver(const byte brightness) :
+    bus(
+        GFX_NOT_DEFINED,  // DC not used
+        39,               // CS: chip select
+        48,               // SCK: software SPI clock
+        47,               // MOSI: software SPI data
+        GFX_NOT_DEFINED   // MISO not used
+    ),
+    rgbpanel(
+        /* DE, VSYNC, HSYNC, PCLK */ 18, 17, 16, 21,
+        /* R0..R4 */ 11, 12, 13, 14, 0,
+        /* G0..G5 */ 8, 20, 3, 46, 9, 10,
+        /* B0..B4 */ 4, 5, 6, 7, 15,
+        /* hsync_pol, hfp, hpw, hbp */ 1, 10, 8, 50,   // horizontal timing parameters
+        /* vsync_pol, vfp, vpw, vbp */ 1, 10, 8, 20,   // vertical timing parameters
+        /* pclk_active_neg */ 0,                       // PCLK polarity
+        /* prefer_speed */ 12000000,                   // pixel clock frequency
+        /* big_endian */ false,                        // standard byte order
+        /* de_idle_high, pclk_idle_high, bounce_buf */ 0, 0, 0
+    ),
+    Arduino_RGB_Display(
+        480, 480,                   // Panel resolution
+        &rgbpanel,                  // RGB interface
+        0,                          // No rotation
+        true,                       // Automatic frame buffer flush
+        &bus,                       // Command bus
+        GFX_NOT_DEFINED,            // No dedicated reset pin
+        st7701_type9_init_operations,
+        sizeof(st7701_type9_init_operations)
+    )
+{
+    ledcAttach(GFX_BL, PWM_FREQ, PWM_BITS);
+    setBrightness(brightness);
+}
+
+ESP32_4848S040_Driver::~ESP32_4848S040_Driver() {
+    ledcDetach(GFX_BL);
+}
+
+void ESP32_4848S040_Driver::setBrightness(const byte value) {
+    ledcWrite(GFX_BL, value);
+}
