@@ -46,6 +46,31 @@ protected:
 
 ## Time Manager
 
+[time-manager.h](time-manager.h) est un contrôleur C++ moderne et entièrement RAII destiné à gérer la synchronisation de l’heure via SNTP sur ESP32.  
+Il encapsule les API ESP‑IDF liées au temps et fournit un mécanisme fiable pour garantir que l’horloge système est correctement synchronisée avant de lancer des services sensibles (TLS, planification, logs horodatés, etc.).
+
+### Fonctionnalités principales
+
+- **RAII complet** : initialisation du service SNTP et des ressources FreeRTOS dans le constructeur, libération automatique dans le destructeur.
+- **Synchronisation bloquante** : la méthode `syncAndWait()` suspend la tâche courante jusqu’à réception d’une mise à jour NTP valide, ou déclenche `abort()` en cas de dépassement de délai.
+- **Thread-safe** : utilisation d’atomiques et d’un sémaphore binaire pour gérer l’état de synchronisation et les signaux asynchrones.
+- **Callback intégré** : la classe installe automatiquement un callback SNTP (`sntp_time_callback`) pour détecter les mises à jour de temps.
+- **Suivi des synchronisations** : compteur interne du nombre de mises à jour NTP réussies, utile pour le monitoring réseau.
+- **Gestion du fuseau horaire** : configuration simple via une chaîne POSIX (`setTimezone()`), avec support DST.
+- **Formats ISO8601** : récupération de l’heure locale ou UTC sous forme de chaînes normalisées.
+
+### Exemple d’utilisation
+
+```cpp
+WifiManager wifi;
+wifi.connectAndWaitIP();
+
+TimeManager timeMgr("pool.ntp.org");
+timeMgr.syncAndWait(30000);
+
+ESP_LOGI("APP", "System time: %s", timeMgr.getLocal_ISO8601().c_str());
+```
+
 ## Driver ESP32-4848S040
 
 [esp32-4848S040-driver.h](esp32-4848S040-driver.h) est un pilote C++ moderne et entièrement RAII conçu pour piloter un écran **480×480 ST7701** via l’interface RGB 5/6/5 de l’ESP32‑S3.
@@ -56,7 +81,7 @@ Le pilote utilise l’API LEDC du core ESP32 Arduino v3 pour gérer la luminosit
 
 En pratique, il suffit d’instancier la classe pour que l’écran soit prêt à l’emploi — aucun appel supplémentaire n’est requis.
 
-``` C++
+```cpp
 #include "esp32-4848S040-driver.h"
 
 auto gfx = ESP32_4848S040_Driver();
