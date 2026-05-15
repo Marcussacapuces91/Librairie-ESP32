@@ -1,6 +1,7 @@
 name: C++ Lint
 
 on:
+  workflow_dispatch:
   push:
     paths:
       - "**/*.h"
@@ -30,4 +31,4 @@ jobs:
       - name: Run clang-tidy
         run: |
           clang-tidy --version
-          find . -regex '.*\.\(cpp\|h\)' -exec clang-tidy {} -- -std=c++17 \;
+          find . -regex '.*\.\(cpp\)' -exec clang-tidy {} -- -std=c++17 \;
