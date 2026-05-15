@@ -3,7 +3,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/platform-ESP32--S3-blue" />
   <img src="https://img.shields.io/github/license/Marcussacapuces91/Librairie-ESP32" />
-  <img src="https://img.shields.io/github/v/tag/Marcussacapuces91/Librairie-ESP32" />
+  <!-- <img src="https://img.shields.io/github/v/tag/Marcussacapuces91/Librairie-ESP32" /> -->
   <img src="https://img.shields.io/github/last-commit/Marcussacapuces91/Librairie-ESP32" />
 </p>
 
