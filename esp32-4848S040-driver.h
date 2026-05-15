@@ -1,5 +1,5 @@
 /**
- * @file driver-esp32-4848S040.h
+ * @file esp32-4848S040-driver.h
  * @brief High-level driver for the ESP32-S3 controlling a 480x480 ST7701 RGB panel.
  *
  * Provides a modern C++ wrapper around Arduino_RGB_Display, encapsulating:
