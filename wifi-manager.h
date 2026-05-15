@@ -108,6 +108,8 @@ class WifiManager {
  */
     virtual ~WifiManager();
 
+    void begin();
+
 /**
  * @brief Start WiFi.
  *
@@ -367,7 +369,24 @@ WifiManager::WifiManager() :
     retry( 3 )
 {
     assert(semIP);
+}
 
+WifiManager::~WifiManager() {
+    // Unregister
+    ESP_ERROR_CHECK( esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_STA_START, eventHandler) );
+    ESP_ERROR_CHECK( esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, eventHandler) );
+    ESP_ERROR_CHECK( esp_event_handler_unregister(SC_EVENT, SC_EVENT_GOT_SSID_PSWD, eventHandler) );
+    ESP_ERROR_CHECK( esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, eventHandler) );
+
+    const auto err = esp_wifi_stop();
+    if (err != ESP_ERR_WIFI_NOT_STARTED && err != ESP_OK) ESP_ERROR_CHECK( err );
+
+    ESP_ERROR_CHECK( esp_wifi_deinit() );
+
+    vSemaphoreDelete(semIP);
+}
+
+void WifiManager::begin() {
     ESP_LOGI(WIFI, "Init NetIf");
     ESP_ERROR_CHECK( esp_netif_init() );
 
@@ -384,21 +403,6 @@ WifiManager::WifiManager() :
     ESP_ERROR_CHECK( esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, eventHandler, this) );
     ESP_ERROR_CHECK( esp_event_handler_register(SC_EVENT, SC_EVENT_GOT_SSID_PSWD, eventHandler, this) );
     ESP_ERROR_CHECK( esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, eventHandler, this) );
-}
-
-WifiManager::~WifiManager() {
-    // Unregister
-    ESP_ERROR_CHECK( esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_STA_START, eventHandler) );
-    ESP_ERROR_CHECK( esp_event_handler_unregister(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, eventHandler) );
-    ESP_ERROR_CHECK( esp_event_handler_unregister(SC_EVENT, SC_EVENT_GOT_SSID_PSWD, eventHandler) );
-    ESP_ERROR_CHECK( esp_event_handler_unregister(IP_EVENT, IP_EVENT_STA_GOT_IP, eventHandler) );
-
-    const auto err = esp_wifi_stop();
-    if (err != ESP_ERR_WIFI_NOT_STARTED && err != ESP_OK) ESP_ERROR_CHECK( err );
-
-    ESP_ERROR_CHECK( esp_wifi_deinit() );
-
-    vSemaphoreDelete(semIP);
 }
 
 void WifiManager::connect() {
