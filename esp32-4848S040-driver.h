@@ -82,18 +82,23 @@ private:
     static constexpr byte PWM_BITS = 8;         ///< PWM resolution (bits)
 
     static constexpr byte TFT_SPI_DC = GFX_NOT_DEFINED;     // DC not used
-    static constexpr byte TFT_SPI_CS = 39;                  // CS: chip select
-    static constexpr byte TFT_SPI_SCK = 48;                 // SCK: clock
-    static constexpr byte TFT_SPI_MOSI = 47;                // MOSI: data -> TFT
+    static constexpr byte TFT_SPI_CS = 39;                  // CS: chip select   (LCD-CS)
+    static constexpr byte TFT_SPI_SCK = 48;                 // SCK: clock        (SCK)
+    static constexpr byte TFT_SPI_MOSI = 47;                // MOSI: data -> TFT (SDA)
     static constexpr byte TFT_SPI_MISO = GFX_NOT_DEFINED;   // MISO: TFT -> data (not used)
 
     static constexpr byte TFT_DE = 18;                      // DE
-    static constexpr byte TFT_VSYNC = 17;                   // VSYNC
-    static constexpr byte TFT_HSYNC = 16;                   // HSYNC
+    static constexpr byte TFT_VSYNC = 17;                   // VSYNC (VS)
+    static constexpr byte TFT_HSYNC = 16;                   // HSYNC (HS)
     static constexpr byte TFT_PCLK = 21;                    // PCLK
-    static constexpr byte TFT_R[] = {11, 12, 13, 14, 0};
-    static constexpr byte TFT_G[] = {8, 20, 3, 46, 9, 10};
-    static constexpr byte TFT_B[] = {4, 5, 6, 7, 15};
+    static constexpr byte TFT_R[] = {11, 12, 13, 14, 0};    // DB13, DB14, DB15, DB16, DB17
+    static constexpr byte TFT_G[] = {8, 20, 3, 46, 9, 10};  // DB6, DB7, DB8, DB9, DB10, DB11
+    static constexpr byte TFT_B[] = {4, 5, 6, 7, 15};       // DB1, DB2, DB3, DB4, DB5
+
+    static constexpr byte TP_INT = GFX_NOT_DEFINED;         // connected to GND
+    static constexpr byte TP_SDA = 19;
+    static constexpr byte TP_SCL = 45;
+    static constexpr byte TP_RST = GFX_NOT_DEFINED;         // RC -> 3.3v
 
     Arduino_SWSPI bus;                          ///< Command bus for ST7701
     Arduino_ESP32RGBPanel rgbpanel;             ///< RGB pixel bus
