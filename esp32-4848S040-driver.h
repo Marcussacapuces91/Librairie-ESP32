@@ -81,6 +81,20 @@ private:
     static constexpr unsigned PWM_FREQ = 1000;  ///< PWM frequency (Hz)
     static constexpr byte PWM_BITS = 8;         ///< PWM resolution (bits)
 
+    static constexpr byte TFT_SPI_DC = GFX_NOT_DEFINED;     // DC not used
+    static constexpr byte TFT_SPI_CS = 39;                  // CS: chip select
+    static constexpr byte TFT_SPI_SCK = 48;                 // SCK: clock
+    static constexpr byte TFT_SPI_MOSI = 47;                // MOSI: data -> TFT
+    static constexpr byte TFT_SPI_MISO = GFX_NOT_DEFINED;   // MISO: TFT -> data (not used)
+
+    static constexpr byte TFT_DE = 18;                      // DE
+    static constexpr byte TFT_VSYNC = 17;                   // VSYNC
+    static constexpr byte TFT_HSYNC = 16;                   // HSYNC
+    static constexpr byte TFT_PCLK = 21;                    // PCLK
+    static constexpr byte TFT_R[] = {11, 12, 13, 14, 0};
+    static constexpr byte TFT_G[] = {8, 20, 3, 46, 9, 10};
+    static constexpr byte TFT_B[] = {4, 5, 6, 7, 15};
+
     Arduino_SWSPI bus;                          ///< Command bus for ST7701
     Arduino_ESP32RGBPanel rgbpanel;             ///< RGB pixel bus
 };
@@ -90,18 +104,12 @@ private:
 // ============================================================================
 
 ESP32_4848S040_Driver::ESP32_4848S040_Driver(const byte brightness) :
-    bus(
-        GFX_NOT_DEFINED,  // DC not used
-        39,               // CS: chip select
-        48,               // SCK: software SPI clock
-        47,               // MOSI: software SPI data
-        GFX_NOT_DEFINED   // MISO not used
-    ),
+    bus(TFT_SPI_DC, TFT_SPI_CS, TFT_SPI_SCK, TFT_SPI_MOSI, TFT_SPI_MISO),
     rgbpanel(
-        /* DE, VSYNC, HSYNC, PCLK */ 18, 17, 16, 21,
-        /* R0..R4 */ 11, 12, 13, 14, 0,
-        /* G0..G5 */ 8, 20, 3, 46, 9, 10,
-        /* B0..B4 */ 4, 5, 6, 7, 15,
+        /* DE, VSYNC, HSYNC, PCLK */ TFT_DE, TFT_VSYNC, TFT_HSYNC, TFT_PCLK,
+        /* R0..R4 */ TFT_R[0], TFT_R[1], TFT_R[2], TFT_R[3], TFT_R[4],              // Red : 5 bits
+        /* G0..G5 */ TFT_G[0], TFT_G[1], TFT_G[2], TFT_G[3], TFT_G[4], TFT_G[5],    // Green : 6 bits
+        /* B0..B4 */ TFT_B[0], TFT_B[1], TFT_B[2], TFT_B[3], TFT_B[4],              // Blue : 5 bits
         /* hsync_pol, hfp, hpw, hbp */ 1, 10, 8, 50,   // horizontal timing parameters
         /* vsync_pol, vfp, vpw, vbp */ 1, 10, 8, 20,   // vertical timing parameters
         /* pclk_active_neg */ 0,                       // PCLK polarity
