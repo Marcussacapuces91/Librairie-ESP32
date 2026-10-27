@@ -6,6 +6,7 @@
  * initialization, cleanup, and SmartConfig provisioning.
  *
  * @details
+ * - **Event loop**: **MUST** be created before any use (before `begin()`.).
  * - **RAII Pattern**: Automatic initialization in constructor, cleanup in destructor.
  *   No global state, no singletons.
  * - **Event-Driven**: All WiFi events are handled via protected virtual methods
@@ -25,8 +26,6 @@
 #include "esp_wifi.h"
 #include "esp_smartconfig.h"
 #include "freertos/semphr.h"
-
-constexpr const char WIFI[] = "WIFI";
 
 /**
  * @class WifiManager
@@ -76,7 +75,9 @@ constexpr const char WIFI[] = "WIFI";
  * - connect() may block the calling task waiting for IP acquisition.
  */
 class WifiManager {
-  public:
+    static constexpr auto TAG = "WIFI";
+
+public:
 
 /**
  * @brief Construct the WifiManager and initialize WiFi stack.
@@ -108,6 +109,11 @@ class WifiManager {
  */
     virtual ~WifiManager();
 
+/**
+ * @brief Initiate all WiFi ressources.
+ * 
+ * `esp_event_loop_create_default();`**MUST** be called before.
+ */
     void begin();
 
 /**
@@ -387,7 +393,7 @@ WifiManager::~WifiManager() {
 }
 
 void WifiManager::begin() {
-    ESP_LOGI(WIFI, "Init NetIf");
+    ESP_LOGI(TAG, "Init NetIf");
     ESP_ERROR_CHECK( esp_netif_init() );
 
     sta_netif = esp_netif_create_default_wifi_sta();
@@ -406,25 +412,25 @@ void WifiManager::begin() {
 }
 
 void WifiManager::connect() {
-    ESP_LOGI(WIFI, "Starting WiFi");
+    ESP_LOGI(TAG, "Starting WiFi");
     ESP_ERROR_CHECK( esp_wifi_start() );
 }
 
 esp_netif_ip_info_t WifiManager::connectAndWaitIP(const unsigned timeout) {
     connect();
 
-    ESP_LOGI(WIFI, "Waiting for IP...");
+    ESP_LOGI(TAG, "Waiting for IP...");
     if (xSemaphoreTake(semIP, pdMS_TO_TICKS(timeout)) == pdTRUE) {
-        ESP_LOGI(WIFI, "Connected!");
+        ESP_LOGI(TAG, "Connected!");
         return getIPInfo();
     } else {
-        ESP_LOGE(WIFI, "Timeout waiting for IP");
+        ESP_LOGE(TAG, "Timeout waiting for IP");
         abort();
     }
 }
 
 void WifiManager::clearCredentials() {
-    ESP_LOGW(WIFI, "Clearing WiFi credentials...");
+    ESP_LOGW(TAG, "Clearing WiFi credentials...");
 
     const auto err = esp_wifi_stop();
     if (err == ESP_ERR_WIFI_NOT_STARTED) {
@@ -434,7 +440,7 @@ void WifiManager::clearCredentials() {
       ESP_ERROR_CHECK(esp_wifi_start());
     } else ESP_ERROR_CHECK(err);
 
-    ESP_LOGI(WIFI, "WiFi credentials erased.");
+    ESP_LOGI(TAG, "WiFi credentials erased.");
 }
 
 esp_netif_ip_info_t WifiManager::getIPInfo() const {
@@ -451,31 +457,31 @@ wifi_ap_record_t WifiManager::getAPInfo() const {
 }
 
 void WifiManager::startSmartConfig() {
-    ESP_LOGI(WIFI, "Starting SmartConfig");
+    ESP_LOGI(TAG, "Starting SmartConfig");
     ESP_ERROR_CHECK( esp_smartconfig_set_type(SC_TYPE_ESPTOUCH) );
     smartconfig_start_config_t cfg = SMARTCONFIG_START_CONFIG_DEFAULT();
     ESP_ERROR_CHECK( esp_smartconfig_start(&cfg) );
 }
 
 void WifiManager::onStaStart() {
-    ESP_LOGI(WIFI, "STA start → connecting using current credentials...");
+    ESP_LOGI(TAG, "STA start → connecting using current credentials...");
 
     // try to connect using stored credentials
     const auto err = esp_wifi_connect();
 
     // Note: ESP_ERR_WIFI_SSID is almost never returned in practice
     if (err == ESP_ERR_WIFI_SSID) {
-      ESP_LOGE(WIFI, "Error connecting: No SSID defined!");
+      ESP_LOGE(TAG, "Error connecting: No SSID defined!");
       startSmartConfig();
     } else
       ESP_ERROR_CHECK(err);
 }
 
 void WifiManager::onStaDisconnected(const wifi_event_sta_disconnected_t& evt) {
-    ESP_LOGW(WIFI, "Disconnected (reason=%d)", evt.reason);
+    ESP_LOGW(TAG, "Disconnected (reason=%d)", evt.reason);
 
     if (retry--) {
-        ESP_LOGI(WIFI, "Retrying (%d left)", retry);
+        ESP_LOGI(TAG, "Retrying (%d left)", retry);
         ESP_ERROR_CHECK( esp_wifi_connect() );
     } else {
         // Retries exhausted, reset counter and start SmartConfig
@@ -485,7 +491,7 @@ void WifiManager::onStaDisconnected(const wifi_event_sta_disconnected_t& evt) {
 }
 
 void WifiManager::onGotSsidPass(const smartconfig_event_got_ssid_pswd_t& evt) {
-    ESP_LOGI(WIFI, "Received SSID and password");
+    ESP_LOGI(TAG, "Received SSID and password");
 
     wifi_config_t cfg = {};
     memcpy(cfg.sta.ssid, evt.ssid, sizeof(cfg.sta.ssid));
@@ -499,7 +505,7 @@ void WifiManager::onGotSsidPass(const smartconfig_event_got_ssid_pswd_t& evt) {
 }
 
 void WifiManager::onGotIp(const ip_event_got_ip_t& evt) {
-    ESP_LOGI(WIFI, "Got IP " IPSTR, IP2STR(&evt.ip_info.ip));
+    ESP_LOGI(TAG, "Got IP " IPSTR, IP2STR(&evt.ip_info.ip));
     xSemaphoreGive(semIP);
 }
 
@@ -508,22 +514,22 @@ void WifiManager::eventHandler(void* arg, esp_event_base_t event_base, int32_t e
     auto& instance = *static_cast<WifiManager*>(arg);
 
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        ESP_LOGI(WIFI, "WIFI Station Start event");
+        ESP_LOGI(TAG, "WIFI Station Start event");
         instance.onStaStart();
     }
     else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        ESP_LOGI(WIFI, "STA disconnected event");
+        ESP_LOGI(TAG, "STA disconnected event");
         instance.onStaDisconnected(*static_cast<const wifi_event_sta_disconnected_t*>(data));
     }
     else if (event_base == SC_EVENT && event_id == SC_EVENT_GOT_SSID_PSWD) {
-        ESP_LOGI(WIFI, "Got SSID and password event");
+        ESP_LOGI(TAG, "Got SSID and password event");
         instance.onGotSsidPass(*static_cast<const smartconfig_event_got_ssid_pswd_t*>(data));
     }
     else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
-        ESP_LOGI(WIFI, "Got IP event");
+        ESP_LOGI(TAG, "Got IP event");
         instance.onGotIp(*static_cast<const ip_event_got_ip_t*>(data));
     }
     else {
-      ESP_LOGW(WIFI, "Unattended event!");
+      ESP_LOGW(TAG, "Unattended event!");
     }
 }
