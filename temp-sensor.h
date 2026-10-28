@@ -28,6 +28,7 @@
  * read-only interface to obtain the current internal temperature in degrees
  * Celsius. The sensor is initialized automatically when an instance is created.
  */
+template<int MinTemp = 20, int MaxTemp = 100>
 class TempSensor {
     temperature_sensor_config_t temp_sensor;
     temperature_sensor_handle_t handle = nullptr;
@@ -82,8 +83,9 @@ public:
  * Uses the default ESP-IDF temperature sensor configuration and installs the
  * driver into the system.
  */
-TempSensor::TempSensor() :
-    temp_sensor( TEMPERATURE_SENSOR_CONFIG_DEFAULT(20, 100) )
+template<int MinTemp, int MaxTemp>
+TempSensor<MinTemp, MaxTemp>::TempSensor() :
+    temp_sensor( TEMPERATURE_SENSOR_CONFIG_DEFAULT(MinTemp, MaxTemp) )
 {
     ESP_ERROR_CHECK( temperature_sensor_install(&temp_sensor, &handle) );
     ESP_ERROR_CHECK( temperature_sensor_enable(handle) );
@@ -95,7 +97,8 @@ TempSensor::TempSensor() :
  * This cleanup is automatically executed when the object goes out of scope to
  * prevent resource leaks.
  */
-TempSensor::~TempSensor() {
+template<int MinTemp, int MaxTemp>
+TempSensor<MinTemp, MaxTemp>::~TempSensor() {
     if (handle) {
         ESP_ERROR_CHECK( temperature_sensor_disable(handle) );
         ESP_ERROR_CHECK( temperature_sensor_uninstall(handle) );
@@ -107,7 +110,8 @@ TempSensor::~TempSensor() {
  *
  * @return The measured temperature in degrees Celsius.
  */
-float TempSensor::read() const {
+template<int MinTemp, int MaxTemp>
+float TempSensor<MinTemp, MaxTemp>::read() const {
     float temp = 0;
     ESP_ERROR_CHECK( temperature_sensor_get_celsius(handle, &temp) );
     return temp;
