@@ -30,6 +30,9 @@
  */
 template<int MinTemp = 20, int MaxTemp = 100>
 class TempSensor {
+    // Compile-time validation of the template configuration.
+    // This prevents invalid ranges such as MinTemp > MaxTemp or values outside
+    // the realistic operating window of the ESP32 internal temperature sensor.
     static_assert(MinTemp <= MaxTemp,
                   "TemperatureSensor: MinTemp must be <= MaxTemp");
 
@@ -81,8 +84,11 @@ public:
      */
     float read() const;
 
+    // Exposes the configured thresholds as compile-time constants.
+    // These values remain available without instantiating an object and can be
+    // reused in templates, static assertions, or diagnostics elsewhere.
     static constexpr int min_value = MinTemp;
-    
+
     static constexpr int max_value = MaxTemp;
 
 };
