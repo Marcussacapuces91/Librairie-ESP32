@@ -1,3 +1,19 @@
+/**
+ * @file temp-sensor.h
+ * @brief High-level RAII internal temperature sensor.
+ *
+ * Provides a modern C++ wrapper around ESP-IDF WiFi APIs with automatic
+ * initialization, cleanup, and mesure reading.
+ *
+ * @details
+ * - **RAII Pattern**: Automatic initialization in constructor, cleanup in destructor.
+ *   No global state, no singletons.
+ *
+ * @author Marc SIBERT
+ * @copyright (c) 2026 by M. SIBERT.
+ * @version 1.0
+ */
+
 #pragma once
 
 #include <driver/temperature_sensor.h>
