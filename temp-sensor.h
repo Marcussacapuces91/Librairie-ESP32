@@ -30,6 +30,12 @@
  */
 template<int MinTemp = 20, int MaxTemp = 100>
 class TempSensor {
+    static_assert(MinTemp <= MaxTemp,
+                  "TemperatureSensor: MinTemp must be <= MaxTemp");
+
+    static_assert(MinTemp >= -40 && MaxTemp <= 150,
+                  "TemperatureSensor: values must be within a reasonable range (> -40, < 150)");
+
     temperature_sensor_config_t temp_sensor;
     temperature_sensor_handle_t handle = nullptr;
 
@@ -74,6 +80,10 @@ public:
      *         degrees Celsius.
      */
     float read() const;
+
+    static constexpr int min_value = MinTemp;
+    
+    static constexpr int max_value = MaxTemp;
 
 };
 
